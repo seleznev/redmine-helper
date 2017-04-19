@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+# -.- coding: utf-8 -.-
+
+import os
+import sys
+import json
+import jinja2
+import argparse
+
+from redminehelper.redmine import Redmine, RedmineError
+
+def print_error(*message):
+    print("{}: {}" .format(os.path.basename(__file__),
+                           ": ".join(list(message))),
+                           file=sys.stderr)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1",
+                        help="print program version")
+
+    parser.add_argument("command", default="list-projects",
+                        choices=["list-projects"])
+    parser.add_argument("-d", "--domain", default="127.0.0.1",
+                        help="Redmine domain")
+    parser.add_argument("-k", "--key", required=True,
+                        help="Redmine API key")
+    parser.add_argument("-t", "--template",
+                        help="path to output template")
+    args = parser.parse_args()
+
+    # Check file exists
+    template_path = args.template
+    if template_path and not os.path.exists(template_path):
+        print_error(template_path, "no such file or directory")
+        sys.exit(1)
+
+    # Recieve data
+    data = {}
+
+    # Get projects
+    redmine = Redmine(args.key, args.domain)
+    data["projects"] = redmine.get_projects()
+
+    # Print output
+    result = ""
+    if template_path:
+        with open(template_path, "r") as template_file:
+            result = jinja2.Template(template_file.read(), trim_blocks=True, lstrip_blocks=True)
+            try:
+                result = result.render(**data)
+            except jinja2.exceptions.UndefinedError as e:
+                print_error("jinja2", e.message)
+                sys.exit(3)
+    else:
+        result = json.dumps(data, indent=4, sort_keys=True)
+
+    try:
+        print(result, end='')
+    except BrokenPipeError:
+        pass
+
+if __name__ == "__main__":
+    main()
